@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (GDDP Style Grid).</p>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
             </div>
             <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
@@ -20,9 +20,9 @@
             </div>
         </header>
 
-        <!-- Main Grid Container (GDDP Style) -->
+        <!-- Main Grid Container -->
         <main id="tracker-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div class="text-center text-slate-400 py-12 col-span-full">Fetching all tiers from Google Sheets...</div>
+            <div class="text-center text-slate-400 py-12 col-span-full">Fetching all 50 tiers from Google Sheets...</div>
         </main>
     </div>
 
@@ -45,28 +45,32 @@
                 currentTierKey = null;
 
                 rows.forEach((row, index) => {
-                    const col0 = row[0] || ""; // Name
-                    const col1 = row[1] || ""; // Mode
+                    const col0 = row[0] || ""; // Tier Name or Level Name
+                    const col1 = row[1] || ""; // Requirement (e.g. Beat All, Beat - 10) or Mode
                     const col2 = row[2] || ""; // Tier Number or Level ID
 
                     if (!col0 && !col1 && !col2) return;
                     if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
 
+                    // Check if this row is a Tier Header (Col C is a number 1-50 and Col B contains "beat")
                     const potentialTierNum = parseInt(col2);
-                    if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1 === "Beat All") {
+                    if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1.toLowerCase().includes("beat")) {
                         currentTierKey = `Tier ${potentialTierNum} - ${col0}`;
                         pucpData[currentTierKey] = {
                             tierNumber: potentialTierNum,
                             tierName: col0,
+                            requirement: col1,
                             challenges: []
                         };
                         return;
                     }
 
+                    // Skip summary rows like "Total - 15"
                     if (col0.toLowerCase().startsWith("total")) {
                         return;
                     }
 
+                    // If it's a level row, add it to the active tier
                     if (currentTierKey && col0 && col2) {
                         pucpData[currentTierKey].challenges.push({
                             id: `ch_${index}`,
@@ -161,7 +165,7 @@
                         <div>
                             <div class="flex justify-between items-start mb-4 border-b border-slate-800 pb-3">
                                 <div>
-                                    <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Tier ${tierObj.tierNumber}</span>
+                                    <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
                                     <h2 class="text-md font-bold text-slate-100">${tierObj.tierName}</h2>
                                 </div>
                                 <span class="text-xs font-semibold text-slate-400 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">${tierCompleted} / ${tierTotal}</span>
