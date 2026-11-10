@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUCP Challenge Progression Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet.</p>
+            </div>
+            <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
+                <span id="total-progress-text" class="text-xl font-bold text-emerald-400">Loading...</span>
+            </div>
+        </header>
+
+        <!-- Main Container -->
+        <main id="tracker-container" class="space-y-6">
+            <div class="text-center text-slate-400 py-12">Fetching challenges from Google Sheets...</div>
+        </main>
+    </div>
+
+    <script>
+        // Your published CSV link
+        const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
+
+        let pucpData = {};
+
+        async function fetchSheetData() {
+            try {
+                const response = await fetch(SHEET_CSV_URL);
+                const csvText = await response.text();
+                
+                // Parse CSV into rows (handling basic lines)
+                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim()));
+                const headers = rows[0]; // Assuming row 1 has headers: Tier, Name, Creator, ID
+                const dataRows = rows.slice(1);
+
+                pucpData = {}; // Reset data object
+
+                dataRows.forEach((row, index) => {
+                    if (row.length < 4 || !row[0]) return; // Skip invalid or empty rows
+                    
+                    const [tier, name, creator, levelId] = row;
+
+                    if (!pucpData[tier]) {
+                        pucpData[tier] = [];
+                    }
+
+                    pucpData[tier].push({
+                        id: `ch_${index}`,
+                        name: name,
+                        creator: creator,
+                        levelId: levelId,
+                        completed: false
+                    });
+                });
+
+                loadProgress();
+                renderTracker();
+            } catch (error) {
+                console.error('Error fetching sheet:', error);
+                document.getElementById('tracker-container').innerHTML = `
+                    <div class="bg-red-950/40 border border-red-800 p-4 rounded-xl text-red-300 text-center">
+                        Failed to load data from Google Sheet. Make sure your sheet is published to the web as a CSV!
+                    </div>
+                `;
+            }
+        }
+
+        // Load saved checkbox states from localStorage
+        function loadProgress() {
+            const saved = localStorage.getItem('pucp_progress');
+            if (saved) {
+                const completedIds = JSON.parse(saved);
+                Object.keys(pucpData).forEach(tier => {
+                    pucpData[tier].forEach(ch => {
+                        if (completedIds.includes(ch.id)) ch.completed = true;
+                    });
+                });
+            }
+        }
+
+        // Save checkbox states to localStorage
+        function saveProgress() {
+            const completedIds = [];
+            Object.keys(pucpData).forEach(tier => {
+                pucpData[tier].forEach(ch => {
+                    if (ch.completed) completedIds.push(ch.id);
+                });
+            });
+            localStorage.setItem('pucp_progress', JSON.stringify(completedIds));
+        }
+
+        // Render the UI dynamically based on fetched tiers
+        function renderTracker() {
+            const container = document.getElementById('tracker-container');
+            container.innerHTML = '';
+
+            let totalChallenges = 0;
+            let totalCompleted = 0;
+
+            Object.keys(pucpData).forEach(tierName => {
+                const challenges = pucpData[tierName];
+                let tierCompleted = 0;
+                let tierTotal = challenges.length;
+
+                let challengesHtml = challenges.map(ch => {
+                    totalChallenges++;
+                    if (ch.completed) {
+                        tierCompleted++;
+                        totalCompleted++;
+                    }
+
+                    return `
+                        <div class="flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 p-3 rounded-lg border border-slate-800/80 transition">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
+                                    onchange="toggleChallenge('${tierName}', '${ch.id}')"
+                                    class="w-5 h-5 accent-indigo-500 rounded cursor-pointer">
+                                <div>
+                                    <h3 class="font-semibold ${ch.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${ch.name}</h3>
+                                    <span class="text-xs text-slate-500">By ${ch.creator} • ID: ${ch.levelId}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
+
+                container.innerHTML += `
+                    <section class="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-bold text-indigo-300">${tierName}</h2>
+                            <span class="text-sm font-medium text-slate-400">${tierCompleted} / ${tierTotal} (${tierPercentage}%)</span>
+                        </div>
+                        <div class="space-y-2">
+                            ${challengesHtml}
+                        </div>
+                    </section>
+                `;
+            });
+
+            let totalPercentage = totalChallenges > 0 ? Math.round((totalCompleted / totalChallenges) * 100) : 0;
+            document.getElementById('total-progress-text').innerText = `${totalCompleted} / ${totalChallenges} (${totalPercentage}%)`;
+        }
+
+        // Toggle state function
+        window.toggleChallenge = function(tierName, chId) {
+            const challenge = pucpData[tierName].find(ch => ch.id === chId);
+            if (challenge) {
+                challenge.completed = !challenge.completed;
+                saveProgress();
+                renderTracker();
+            }
+        }
+
+        // Initialize
+        fetchSheetData();
+    </script>
+</body>
+</html>
