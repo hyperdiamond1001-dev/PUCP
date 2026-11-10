@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet.</p>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
             </div>
             <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
@@ -22,7 +22,7 @@
 
         <!-- Main Container -->
         <main id="tracker-container" class="space-y-6">
-            <div class="text-center text-slate-400 py-12">Fetching challenges from Google Sheets...</div>
+            <div class="text-center text-slate-400 py-12">Fetching all 50 tiers from Google Sheets...</div>
         </main>
     </div>
 
@@ -30,6 +30,7 @@
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
 
         let pucpData = {};
+        let currentTierKey = null;
 
         async function fetchSheetData() {
             const container = document.getElementById('tracker-container');
@@ -41,38 +42,36 @@
                 const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim().replace(/^"|"$/g, '')));
                 
                 pucpData = {};
-                let currentTier = "Unassigned";
+                currentTierKey = null;
 
                 rows.forEach((row, index) => {
-                    const col0 = row[0] || "";
-                    const col1 = row[1] || "";
-                    const col2 = row[2] || "";
+                    const col0 = row[0] || ""; // Name
+                    const col1 = row[1] || ""; // Mode
+                    const col2 = row[2] || ""; // Tier Number or Level ID
 
-                    // Skip empty rows or title banners
                     if (!col0 && !col1 && !col2) return;
                     if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
 
-                    // Check if this row is a Tier Header (Column B is "Beat All")
-                    if (col1 === "Beat All") {
-                        currentTier = col0;
-                        if (!pucpData[currentTier]) {
-                            pucpData[currentTier] = [];
-                        }
-                        return; // Skip adding the header row as a challenge
+                    // Check if this row is a Tier Header (Col C is a small number 1-50 and Col B is "Beat All")
+                    const potentialTierNum = parseInt(col2);
+                    if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1 === "Beat All") {
+                        currentTierKey = `Tier ${potentialTierNum} - ${col0}`;
+                        pucpData[currentTierKey] = {
+                            tierNumber: potentialTierNum,
+                            tierName: col0,
+                            challenges: []
+                        };
+                        return;
                     }
 
-                    // Skip total summary rows (e.g. "Total - 7")
+                    // Skip summary rows like "Total - 7"
                     if (col0.toLowerCase().startsWith("total")) {
                         return;
                     }
 
-                    // Otherwise, this is a challenge level row!
-                    if (currentTier && col0 && col2) {
-                        if (!pucpData[currentTier]) {
-                            pucpData[currentTier] = [];
-                        }
-
-                        pucpData[currentTier].push({
+                    // If it's a level row, add it to the active tier
+                    if (currentTierKey && col0 && col2) {
+                        pucpData[currentTierKey].challenges.push({
                             id: `ch_${index}`,
                             name: col0,
                             mode: col1,
@@ -99,8 +98,8 @@
             const saved = localStorage.getItem('pucp_progress');
             if (saved) {
                 const completedIds = JSON.parse(saved);
-                Object.keys(pucpData).forEach(tier => {
-                    pucpData[tier].forEach(ch => {
+                Object.keys(pucpData).forEach(tierKey => {
+                    pucpData[tierKey].challenges.forEach(ch => {
                         if (completedIds.includes(ch.id)) ch.completed = true;
                     });
                 });
@@ -109,8 +108,8 @@
 
         function saveProgress() {
             const completedIds = [];
-            Object.keys(pucpData).forEach(tier => {
-                pucpData[tier].forEach(ch => {
+            Object.keys(pucpData).forEach(tierKey => {
+                pucpData[tierKey].challenges.forEach(ch => {
                     if (ch.completed) completedIds.push(ch.id);
                 });
             });
@@ -124,14 +123,15 @@
             let totalChallenges = 0;
             let totalCompleted = 0;
 
-            const tiers = Object.keys(pucpData);
-            if (tiers.length === 0) {
-                container.innerHTML = `<div class="text-slate-400 text-center">No challenges found. Check your sheet format.</div>`;
+            const tierKeys = Object.keys(pucpData);
+            if (tierKeys.length === 0) {
+                container.innerHTML = `<div class="text-slate-400 text-center">No challenges found.</div>`;
                 return;
             }
 
-            tiers.forEach(tierName => {
-                const challenges = pucpData[tierName];
+            tierKeys.forEach(tierKey => {
+                const tierObj = pucpData[tierKey];
+                const challenges = tierObj.challenges;
                 if (challenges.length === 0) return;
 
                 let tierCompleted = 0;
@@ -148,7 +148,7 @@
                         <div class="flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 p-3 rounded-lg border border-slate-800/80 transition">
                             <div class="flex items-center space-x-3">
                                 <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
-                                    onchange="toggleChallenge('${tierName.replace(/'/g, "\\'")}', '${ch.id}')"
+                                    onchange="toggleChallenge('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
                                     class="w-5 h-5 accent-indigo-500 rounded cursor-pointer">
                                 <div>
                                     <h3 class="font-semibold ${ch.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${ch.name}</h3>
@@ -164,7 +164,10 @@
                 container.innerHTML += `
                     <section class="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
                         <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-lg font-bold text-indigo-300">${tierName}</h2>
+                            <div>
+                                <span class="text-xs font-bold text-indigo-400 uppercase tracking-wider">Tier ${tierObj.tierNumber}</span>
+                                <h2 class="text-lg font-bold text-slate-100">${tierObj.tierName}</h2>
+                            </div>
                             <span class="text-sm font-medium text-slate-400">${tierCompleted} / ${tierTotal} (${tierPercentage}%)</span>
                         </div>
                         <div class="space-y-2">
@@ -178,12 +181,15 @@
             document.getElementById('total-progress-text').innerText = `${totalCompleted} / ${totalChallenges} (${totalPercentage}%)`;
         }
 
-        window.toggleChallenge = function(tierName, chId) {
-            const challenge = pucpData[tierName].find(ch => ch.id === chId);
-            if (challenge) {
-                challenge.completed = !challenge.completed;
-                saveProgress();
-                renderTracker();
+        window.toggleChallenge = function(tierKey, chId) {
+            const tierObj = pucpData[tierKey];
+            if (tierObj) {
+                const challenge = tierObj.challenges.find(ch => ch.id === chId);
+                if (challenge) {
+                    challenge.completed = !challenge.completed;
+                    saveProgress();
+                    renderTracker();
+                }
             }
         }
 
