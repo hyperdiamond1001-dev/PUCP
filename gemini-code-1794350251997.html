@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUCP Challenge Progression Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans p-6">
+    <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
+            <div>
+                <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
+                <p class="text-slate-400 text-sm mt-1">Track your custom challenge list completion seamlessly.</p>
+            </div>
+            <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
+                <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
+                <span id="total-progress-text" class="text-xl font-bold text-emerald-400">0 / 0 (0%)</span>
+            </div>
+        </header>
+
+        <!-- Tier Container -->
+        <main id="tier-container" class="space-y-6">
+            <!-- Dynamic tiers will be injected here via JavaScript -->
+        </main>
+    </div>
+
+    <script>
+        // Sample data structure based on your PUCP challenge categories/tiers
+        // You can replace or fetch this data directly from your Google Sheet structure.
+        const pucpData = [
+            {
+                tier: "Beginner Tier",
+                color: "border-blue-500",
+                challenges: [
+                    { id: "pucp_1", name: "Challenge Alpha", creator: "Creator1", levelId: "12345678", completed: false },
+                    { id: "pucp_2", name: "Challenge Beta", creator: "Creator2", levelId: "87654321", completed: false }
+                ]
+            },
+            {
+                tier: "Bronze Tier",
+                color: "border-amber-600",
+                challenges: [
+                    { id: "pucp_3", name: "Challenge Gamma", creator: "Creator3", levelId: "11223344", completed: false }
+                ]
+            }
+        ];
+
+        // Load saved progress from browser localStorage
+        function loadProgress() {
+            const saved = localStorage.getItem('pucp_progress');
+            if (saved) {
+                const completedIds = JSON.parse(saved);
+                pucpData.forEach(tier => {
+                    tier.challenges.forEach(ch => {
+                        if (completedIds.includes(ch.id)) ch.completed = true;
+                    });
+                });
+            }
+        }
+
+        // Save progress to localStorage
+        function saveProgress() {
+            const completedIds = [];
+            pucpData.forEach(tier => {
+                tier.challenges.forEach(ch => {
+                    if (ch.completed) completedIds.push(ch.id);
+                });
+            });
+            localStorage.setItem('pucp_progress', JSON.stringify(completedIds));
+        }
+
+        // Render the UI
+        function renderTracker() {
+            const container = document.getElementById('tier-container');
+            container.innerHTML = '';
+
+            let totalChallenges = 0;
+            let totalCompleted = 0;
+
+            pucpData.forEach((tierData, tierIndex) => {
+                let tierCompleted = 0;
+                let tierTotal = tierData.challenges.length;
+
+                let challengesHtml = tierData.challenges.map((ch, chIndex) => {
+                    totalChallenges++;
+                    if (ch.completed) {
+                        tierCompleted++;
+                        totalCompleted++;
+                    }
+
+                    return `
+                        <div class="flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 p-3 rounded-lg border border-slate-800/80 transition">
+                            <div class="flex items-center space-x-3">
+                                <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
+                                    onchange="toggleChallenge(${tierIndex}, ${chIndex})"
+                                    class="w-5 h-5 accent-indigo-500 rounded cursor-pointer">
+                                <div>
+                                    <h3 class="font-semibold ${ch.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${ch.name}</h3>
+                                    <span class="text-xs text-slate-500">By ${ch.creator} • ID: ${ch.levelId}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
+
+                container.innerHTML += `
+                    <section class="bg-slate-900/40 border-l-4 ${tierData.color} border border-slate-800 rounded-xl p-5">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-bold text-slate-200">${tierData.tier}</h2>
+                            <span class="text-sm font-medium text-slate-400">${tierCompleted} / ${tierTotal} (${tierPercentage}%)</span>
+                        </div>
+                        <div class="space-y-2">
+                            ${challengesHtml}
+                        </div>
+                    </section>
+                `;
+            });
+
+            let totalPercentage = totalChallenges > 0 ? Math.round((totalCompleted / totalChallenges) * 100) : 0;
+            document.getElementById('total-progress-text').innerText = `${totalCompleted} / ${totalChallenges} (${totalPercentage}%)`;
+        }
+
+        // Toggle state function
+        window.toggleChallenge = function(tierIdx, chIdx) {
+            pucpData[tierIdx].challenges[chIdx].completed = !pucpData[tierIdx].challenges[chIdx].completed;
+            saveProgress();
+            renderTracker();
+        }
+
+        // Initialize App
+        loadProgress();
+        renderTracker();
+    </script>
+</body>
+</html>
