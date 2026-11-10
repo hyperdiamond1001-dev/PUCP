@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (Colored Tiers).</p>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (Exact Sheet Colors).</p>
             </div>
             <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
@@ -32,23 +32,23 @@
         let pucpData = {};
         let currentTierKey = null;
 
-        // Color themes that cycle through for the tiers
-        function getTierTheme(tierNum) {
-            const themes = [
-                { cardBg: 'bg-red-950/20', headerBg: 'bg-red-950/60', border: 'border-red-900/60', text: 'text-red-300', badge: 'bg-red-950 border-red-800 text-red-200' },
-                { cardBg: 'bg-orange-950/20', headerBg: 'bg-orange-950/60', border: 'border-orange-900/60', text: 'text-orange-300', badge: 'bg-orange-950 border-orange-800 text-orange-200' },
-                { cardBg: 'bg-amber-950/20', headerBg: 'bg-amber-950/60', border: 'border-amber-900/60', text: 'text-amber-300', badge: 'bg-amber-950 border-amber-800 text-amber-200' },
-                { cardBg: 'bg-yellow-950/20', headerBg: 'bg-yellow-950/60', border: 'border-yellow-900/60', text: 'text-yellow-300', badge: 'bg-yellow-950 border-yellow-800 text-yellow-200' },
-                { cardBg: 'bg-emerald-950/20', headerBg: 'bg-emerald-950/60', border: 'border-emerald-900/60', text: 'text-emerald-300', badge: 'bg-emerald-950 border-emerald-800 text-emerald-200' },
-                { cardBg: 'bg-teal-950/20', headerBg: 'bg-teal-950/60', border: 'border-teal-900/60', text: 'text-teal-300', badge: 'bg-teal-950 border-teal-800 text-teal-200' },
-                { cardBg: 'bg-cyan-950/20', headerBg: 'bg-cyan-950/60', border: 'border-cyan-900/60', text: 'text-cyan-300', badge: 'bg-cyan-950 border-cyan-800 text-cyan-200' },
-                { cardBg: 'bg-blue-950/20', headerBg: 'bg-blue-950/60', border: 'border-blue-900/60', text: 'text-blue-300', badge: 'bg-blue-950 border-blue-800 text-blue-200' },
-                { cardBg: 'bg-indigo-950/20', headerBg: 'bg-indigo-950/60', border: 'border-indigo-900/60', text: 'text-indigo-300', badge: 'bg-indigo-950 border-indigo-800 text-indigo-200' },
-                { cardBg: 'bg-purple-950/20', headerBg: 'bg-purple-950/60', border: 'border-purple-900/60', text: 'text-purple-300', badge: 'bg-purple-950 border-purple-800 text-purple-200' },
-                { cardBg: 'bg-pink-950/20', headerBg: 'bg-pink-950/60', border: 'border-pink-900/60', text: 'text-pink-300', badge: 'bg-pink-950 border-pink-800 text-pink-200' },
-                { cardBg: 'bg-rose-950/20', headerBg: 'bg-rose-950/60', border: 'border-rose-900/60', text: 'text-rose-300', badge: 'bg-rose-950 border-rose-800 text-rose-200' }
+        // Exact spreadsheet palette mapper that cycles through distinct color groups
+        function getExactTierColors(tierNum) {
+            const palette = [
+                { card: '#ffb3b3', header: '#fd8989', text: '#5a1a1a' }, // Red (Tier 1: Aphantite)
+                { card: '#ffe6b3', header: '#ffd189', text: '#5a451a' }, // Orange/Yellow
+                { card: '#ffffb3', header: '#ffea89', text: '#5a5a1a' }, // Yellow
+                { card: '#e6ffb3', header: '#d1ff89', text: '#3b5a1a' }, // Light Green
+                { card: '#b3ffb3', header: '#89ff89', text: '#1a5a1a' }, // Green
+                { card: '#b3ffea', header: '#89ffd1', text: '#1a5a45' }, // Teal
+                { card: '#b3ffff', header: '#89ffff', text: '#1a5a5a' }, // Cyan
+                { card: '#b3e6ff', header: '#89d1ff', text: '#1a3b5a' }, // Light Blue
+                { card: '#b3b3ff', header: '#8989ff', text: '#1a1a5a' }, // Blue/Indigo
+                { card: '#e6b3ff', header: '#d189ff', text: '#451a5a' }, // Purple
+                { card: '#ffb3ff', header: '#ff89ff', text: '#5a1a5a' }, // Pink
+                { card: '#ffb3e6', header: '#ff89d1', text: '#5a1a3b' }  // Rose
             ];
-            return themes[(tierNum - 1) % themes.length];
+            return palette[(tierNum - 1) % palette.length];
         }
 
         async function fetchSheetData() {
@@ -153,7 +153,7 @@
 
                 let tierCompleted = 0;
                 let tierTotal = challenges.length;
-                const theme = getTierTheme(tierObj.tierNumber);
+                const colors = getExactTierColors(tierObj.tierNumber);
 
                 let challengesHtml = challenges.map(ch => {
                     totalChallenges++;
@@ -163,14 +163,14 @@
                     }
 
                     return `
-                        <div class="flex items-center justify-between bg-slate-950/60 hover:bg-slate-900 p-3 rounded-lg border border-slate-800/80 transition">
+                        <div class="flex items-center justify-between p-3 rounded-lg transition" style="background-color: ${colors.card}; color: #1e293b;">
                             <div>
-                                <h3 class="font-semibold text-sm ${ch.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${ch.name}</h3>
-                                <span class="text-[11px] text-slate-500">${ch.mode} • ID: ${ch.levelId}</span>
+                                <h3 class="font-bold text-sm ${ch.completed ? 'line-through opacity-50' : ''}">${ch.name}</h3>
+                                <span class="text-[11px] opacity-75">${ch.mode} • ID: ${ch.levelId}</span>
                             </div>
                             <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
                                 onchange="toggleChallenge('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
-                                class="w-5 h-5 accent-indigo-500 rounded cursor-pointer ml-3">
+                                class="w-5 h-5 accent-slate-900 rounded cursor-pointer ml-3">
                         </div>
                     `;
                 }).join('');
@@ -178,21 +178,21 @@
                 let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
 
                 container.innerHTML += `
-                    <section class="${theme.cardBg} border ${theme.border} rounded-xl p-5 flex flex-col justify-between shadow-lg backdrop-blur-sm">
+                    <section class="border border-slate-700/60 rounded-xl p-5 flex flex-col justify-between shadow-xl" style="background-color: ${colors.card};">
                         <div>
-                            <div class="${theme.headerBg} border ${theme.border} rounded-lg p-3.5 mb-4 flex justify-between items-start">
+                            <div class="rounded-lg p-3.5 mb-4 flex justify-between items-start shadow-sm" style="background-color: ${colors.header}; color: ${colors.text};">
                                 <div>
-                                    <span class="text-[10px] font-bold ${theme.text} uppercase tracking-wider block">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
-                                    <h2 class="text-md font-bold text-slate-100 mt-0.5">${tierObj.tierName}</h2>
+                                    <span class="text-[10px] font-black uppercase tracking-wider block opacity-85">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
+                                    <h2 class="text-md font-black mt-0.5">${tierObj.tierName}</h2>
                                 </div>
-                                <span class="text-xs font-semibold ${theme.badge} px-2.5 py-1 rounded-md border">${tierCompleted} / ${tierTotal}</span>
+                                <span class="text-xs font-bold bg-black/10 px-2.5 py-1 rounded-md">${tierCompleted} / ${tierTotal}</span>
                             </div>
                             <div class="space-y-2">
                                 ${challengesHtml}
                             </div>
                         </div>
-                        <div class="mt-4 pt-3 border-t border-slate-800/60 text-right">
-                            <span class="text-xs font-medium text-emerald-400">${tierPercentage}% Completed</span>
+                        <div class="mt-4 pt-3 border-t border-black/10 text-right">
+                            <span class="text-xs font-bold" style="color: #065f46;">${tierPercentage}% Completed</span>
                         </div>
                     </section>
                 `;
