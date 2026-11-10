@@ -27,54 +27,74 @@
     </div>
 
     <script>
-        // Your published CSV link
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
 
         let pucpData = {};
 
         async function fetchSheetData() {
+            const container = document.getElementById('tracker-container');
             try {
                 const response = await fetch(SHEET_CSV_URL);
-                const csvText = await response.text();
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
                 
-                // Parse CSV into rows (handling basic lines)
-                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim()));
-                const headers = rows[0]; // Assuming row 1 has headers: Tier, Name, Creator, ID
-                const dataRows = rows.slice(1);
+                const csvText = await response.text();
+                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim().replace(/^"|"$/g, '')));
+                
+                pucpData = {};
+                let currentTier = "Unassigned";
 
-                pucpData = {}; // Reset data object
+                rows.forEach((row, index) => {
+                    const col0 = row[0] || "";
+                    const col1 = row[1] || "";
+                    const col2 = row[2] || "";
 
-                dataRows.forEach((row, index) => {
-                    if (row.length < 4 || !row[0]) return; // Skip invalid or empty rows
-                    
-                    const [tier, name, creator, levelId] = row;
+                    // Skip empty rows or title banners
+                    if (!col0 && !col1 && !col2) return;
+                    if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
 
-                    if (!pucpData[tier]) {
-                        pucpData[tier] = [];
+                    // Check if this row is a Tier Header (Column B is "Beat All")
+                    if (col1 === "Beat All") {
+                        currentTier = col0;
+                        if (!pucpData[currentTier]) {
+                            pucpData[currentTier] = [];
+                        }
+                        return; // Skip adding the header row as a challenge
                     }
 
-                    pucpData[tier].push({
-                        id: `ch_${index}`,
-                        name: name,
-                        creator: creator,
-                        levelId: levelId,
-                        completed: false
-                    });
+                    // Skip total summary rows (e.g. "Total - 7")
+                    if (col0.toLowerCase().startsWith("total")) {
+                        return;
+                    }
+
+                    // Otherwise, this is a challenge level row!
+                    if (currentTier && col0 && col2) {
+                        if (!pucpData[currentTier]) {
+                            pucpData[currentTier] = [];
+                        }
+
+                        pucpData[currentTier].push({
+                            id: `ch_${index}`,
+                            name: col0,
+                            mode: col1,
+                            levelId: col2,
+                            completed: false
+                        });
+                    }
                 });
 
                 loadProgress();
                 renderTracker();
             } catch (error) {
                 console.error('Error fetching sheet:', error);
-                document.getElementById('tracker-container').innerHTML = `
-                    <div class="bg-red-950/40 border border-red-800 p-4 rounded-xl text-red-300 text-center">
-                        Failed to load data from Google Sheet. Make sure your sheet is published to the web as a CSV!
+                container.innerHTML = `
+                    <div class="bg-red-950/40 border border-red-800 p-6 rounded-xl text-red-300">
+                        <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
+                        <p class="text-sm text-red-400">Error: ${error.message}</p>
                     </div>
                 `;
             }
         }
 
-        // Load saved checkbox states from localStorage
         function loadProgress() {
             const saved = localStorage.getItem('pucp_progress');
             if (saved) {
@@ -87,7 +107,6 @@
             }
         }
 
-        // Save checkbox states to localStorage
         function saveProgress() {
             const completedIds = [];
             Object.keys(pucpData).forEach(tier => {
@@ -98,7 +117,6 @@
             localStorage.setItem('pucp_progress', JSON.stringify(completedIds));
         }
 
-        // Render the UI dynamically based on fetched tiers
         function renderTracker() {
             const container = document.getElementById('tracker-container');
             container.innerHTML = '';
@@ -106,8 +124,16 @@
             let totalChallenges = 0;
             let totalCompleted = 0;
 
-            Object.keys(pucpData).forEach(tierName => {
+            const tiers = Object.keys(pucpData);
+            if (tiers.length === 0) {
+                container.innerHTML = `<div class="text-slate-400 text-center">No challenges found. Check your sheet format.</div>`;
+                return;
+            }
+
+            tiers.forEach(tierName => {
                 const challenges = pucpData[tierName];
+                if (challenges.length === 0) return;
+
                 let tierCompleted = 0;
                 let tierTotal = challenges.length;
 
@@ -122,11 +148,11 @@
                         <div class="flex items-center justify-between bg-slate-900/60 hover:bg-slate-900 p-3 rounded-lg border border-slate-800/80 transition">
                             <div class="flex items-center space-x-3">
                                 <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
-                                    onchange="toggleChallenge('${tierName}', '${ch.id}')"
+                                    onchange="toggleChallenge('${tierName.replace(/'/g, "\\'")}', '${ch.id}')"
                                     class="w-5 h-5 accent-indigo-500 rounded cursor-pointer">
                                 <div>
                                     <h3 class="font-semibold ${ch.completed ? 'line-through text-slate-500' : 'text-slate-200'}">${ch.name}</h3>
-                                    <span class="text-xs text-slate-500">By ${ch.creator} • ID: ${ch.levelId}</span>
+                                    <span class="text-xs text-slate-500">Mode: ${ch.mode} • ID: ${ch.levelId}</span>
                                 </div>
                             </div>
                         </div>
@@ -152,7 +178,6 @@
             document.getElementById('total-progress-text').innerText = `${totalCompleted} / ${totalChallenges} (${totalPercentage}%)`;
         }
 
-        // Toggle state function
         window.toggleChallenge = function(tierName, chId) {
             const challenge = pucpData[tierName].find(ch => ch.id === chId);
             if (challenge) {
@@ -162,7 +187,6 @@
             }
         }
 
-        // Initialize
         fetchSheetData();
     </script>
 </body>
