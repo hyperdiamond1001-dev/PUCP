@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (Colored Tiers).</p>
             </div>
             <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
@@ -32,6 +32,25 @@
         let pucpData = {};
         let currentTierKey = null;
 
+        // Color themes that cycle through for the tiers
+        function getTierTheme(tierNum) {
+            const themes = [
+                { cardBg: 'bg-red-950/20', headerBg: 'bg-red-950/60', border: 'border-red-900/60', text: 'text-red-300', badge: 'bg-red-950 border-red-800 text-red-200' },
+                { cardBg: 'bg-orange-950/20', headerBg: 'bg-orange-950/60', border: 'border-orange-900/60', text: 'text-orange-300', badge: 'bg-orange-950 border-orange-800 text-orange-200' },
+                { cardBg: 'bg-amber-950/20', headerBg: 'bg-amber-950/60', border: 'border-amber-900/60', text: 'text-amber-300', badge: 'bg-amber-950 border-amber-800 text-amber-200' },
+                { cardBg: 'bg-yellow-950/20', headerBg: 'bg-yellow-950/60', border: 'border-yellow-900/60', text: 'text-yellow-300', badge: 'bg-yellow-950 border-yellow-800 text-yellow-200' },
+                { cardBg: 'bg-emerald-950/20', headerBg: 'bg-emerald-950/60', border: 'border-emerald-900/60', text: 'text-emerald-300', badge: 'bg-emerald-950 border-emerald-800 text-emerald-200' },
+                { cardBg: 'bg-teal-950/20', headerBg: 'bg-teal-950/60', border: 'border-teal-900/60', text: 'text-teal-300', badge: 'bg-teal-950 border-teal-800 text-teal-200' },
+                { cardBg: 'bg-cyan-950/20', headerBg: 'bg-cyan-950/60', border: 'border-cyan-900/60', text: 'text-cyan-300', badge: 'bg-cyan-950 border-cyan-800 text-cyan-200' },
+                { cardBg: 'bg-blue-950/20', headerBg: 'bg-blue-950/60', border: 'border-blue-900/60', text: 'text-blue-300', badge: 'bg-blue-950 border-blue-800 text-blue-200' },
+                { cardBg: 'bg-indigo-950/20', headerBg: 'bg-indigo-950/60', border: 'border-indigo-900/60', text: 'text-indigo-300', badge: 'bg-indigo-950 border-indigo-800 text-indigo-200' },
+                { cardBg: 'bg-purple-950/20', headerBg: 'bg-purple-950/60', border: 'border-purple-900/60', text: 'text-purple-300', badge: 'bg-purple-950 border-purple-800 text-purple-200' },
+                { cardBg: 'bg-pink-950/20', headerBg: 'bg-pink-950/60', border: 'border-pink-900/60', text: 'text-pink-300', badge: 'bg-pink-950 border-pink-800 text-pink-200' },
+                { cardBg: 'bg-rose-950/20', headerBg: 'bg-rose-950/60', border: 'border-rose-900/60', text: 'text-rose-300', badge: 'bg-rose-950 border-rose-800 text-rose-200' }
+            ];
+            return themes[(tierNum - 1) % themes.length];
+        }
+
         async function fetchSheetData() {
             const container = document.getElementById('tracker-container');
             try {
@@ -45,9 +64,9 @@
                 currentTierKey = null;
 
                 rows.forEach((row, index) => {
-                    const col0 = row[0] || ""; // Tier Name or Level Name
-                    const col1 = row[1] || ""; // Requirement (e.g. Beat All, Beat - 10) or Mode
-                    const col2 = row[2] || ""; // Tier Number or Level ID
+                    const col0 = row[0] || ""; 
+                    const col1 = row[1] || ""; 
+                    const col2 = row[2] || ""; 
 
                     if (!col0 && !col1 && !col2) return;
                     if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
@@ -134,6 +153,7 @@
 
                 let tierCompleted = 0;
                 let tierTotal = challenges.length;
+                const theme = getTierTheme(tierObj.tierNumber);
 
                 let challengesHtml = challenges.map(ch => {
                     totalChallenges++;
@@ -158,14 +178,14 @@
                 let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
 
                 container.innerHTML += `
-                    <section class="bg-slate-900/60 border border-slate-800 rounded-xl p-5 flex flex-col justify-between shadow-lg">
+                    <section class="${theme.cardBg} border ${theme.border} rounded-xl p-5 flex flex-col justify-between shadow-lg backdrop-blur-sm">
                         <div>
-                            <div class="flex justify-between items-start mb-4 border-b border-slate-800 pb-3">
+                            <div class="${theme.headerBg} border ${theme.border} rounded-lg p-3.5 mb-4 flex justify-between items-start">
                                 <div>
-                                    <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider block">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
-                                    <h2 class="text-md font-bold text-slate-100">${tierObj.tierName}</h2>
+                                    <span class="text-[10px] font-bold ${theme.text} uppercase tracking-wider block">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
+                                    <h2 class="text-md font-bold text-slate-100 mt-0.5">${tierObj.tierName}</h2>
                                 </div>
-                                <span class="text-xs font-semibold text-slate-400 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800">${tierCompleted} / ${tierTotal}</span>
+                                <span class="text-xs font-semibold ${theme.badge} px-2.5 py-1 rounded-md border">${tierCompleted} / ${tierTotal}</span>
                             </div>
                             <div class="space-y-2">
                                 ${challengesHtml}
