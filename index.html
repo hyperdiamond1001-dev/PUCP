@@ -9,14 +9,24 @@
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans p-6">
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
+        <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
                 <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
             </div>
-            <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
-                <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
-                <span id="total-progress-text" class="text-xl font-bold text-emerald-400">Loading...</span>
+            
+            <div class="flex items-center gap-4">
+                <!-- Search Bar -->
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Search tiers, levels, IDs..." 
+                        oninput="handleSearch()"
+                        class="bg-slate-900 border border-slate-700 rounded-md px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-64 shadow-inner">
+                </div>
+
+                <div class="bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-md text-center">
+                    <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Total Progress</span>
+                    <span id="total-progress-text" class="text-xl font-bold text-emerald-400">Loading...</span>
+                </div>
             </div>
         </header>
 
@@ -26,249 +36,41 @@
         </main>
     </div>
 
+    <!-- Proof Modal / Prompt Handler -->
+    <div id="proof-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-md p-6 max-w-md w-full shadow-2xl">
+            <h3 class="text-lg font-bold text-indigo-300 mb-2">Proof Required</h3>
+            <p id="proof-modal-text" class="text-sm text-slate-300 mb-4">Tier 21 and above require submission proof (video link, clip, etc.). Please enter your proof link below:</p>
+            <input type="text" id="proof-input" placeholder="https://youtube.com/... or clip link" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-indigo-500">
+            <div class="flex justify-end gap-3">
+                <button onclick="closeProofModal(false)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 font-medium transition">Cancel</button>
+                <button onclick="closeProofModal(true)" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 rounded-md text-white font-medium transition">Submit & Check</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
 
         let pucpData = {};
         let currentTierKey = null;
+        let searchQuery = "";
+        
+        // Temporary state tracking for proof modal callbacks
+        let pendingTierKey = null;
+        let pendingChId = null;
 
-        // Custom exact colors for Tiers 1–50 (darker first, lighter second)
+        // Custom exact colors for Tiers 1–50
         const customTierColors = [
-            { dark: "#fd8989", light: "#ffb3b3" }, // Tier 1
-            { dark: "#fbf09d", light: "#fff8c2" }, // Tier 2
-            { dark: "#b1d3d4", light: "#d0f3f4" }, // Tier 3
-            { dark: "#c17a7a", light: "#efa2a2" }, // Tier 4
-            { dark: "#a37dd9", light: "#caa7fb" }, // Tier 5
-            { dark: "#dbb7b7", light: "#efdbdb" }, // Tier 6
-            { dark: "#f2b3c1", light: "#f2cad3" }, // Tier 7
-            { dark: "#eccda9", light: "#f1dbc1" }, // Tier 8
-            { dark: "#5d4cb0", light: "#897ad2" }, // Tier 9
-            { dark: "#a8c6c8", light: "#c6e8ea" }, // Tier 10
-            { dark: "#89b780", light: "#b4deab" }, // Tier 11
-            { dark: "#6d8586", light: "#97b1b2" }, // Tier 12
-            { dark: "#c3d19b", light: "#e8f4c8" }, // Tier 13
-            { dark: "#74a89f", light: "#9bcfc6" }, // Tier 14
-            { dark: "#9e4d40", light: "#c46f61" }, // Tier 15
-            { dark: "#e3576f", light: "#ef7c90" }, // Tier 16
-            { dark: "#caa567", light: "#e5c58f" }, // Tier 17
-            { dark: "#ff76c6", light: "#ffa8db" }, // Tier 18
-            { dark: "#4e5058", light: "#808495" }, // Tier 19
-            { dark: "#3b6089", light: "#7194bb" }, // Tier 20
-            { dark: "#a9c369", light: "#d1e996" }, // Tier 21
-            { dark: "#9c4b69", light: "#cd7395" }, // Tier 22
-            { dark: "#ff9df3", light: "#ffbdf7" }, // Tier 23
-            { dark: "#8b5a70", light: "#c087a1" }, // Tier 24
-            { dark: "#ff7564", light: "#ff9689" }, // Tier 25
-            { dark: "#b91212", light: "#e03a3a" }, // Tier 26
-            { dark: "#955f8a", light: "#b982ae" }, // Tier 27
-            { dark: "#758f9e", light: "#aec3cf" }, // Tier 28
-            { dark: "#143f3e", light: "#2c6362" }, // Tier 29
-            { dark: "#b1eedc", light: "#e5fff7" }, // Tier 30
-            { dark: "#5f5064", light: "#91799a" }, // Tier 31
-            { dark: "#4b6154", light: "#6e8d7b" }, // Tier 32
-            { dark: "#734949", light: "#ae7777" }, // Tier 33
-            { dark: "#71163f", light: "#8c345c" }, // Tier 34
-            { dark: "#babe90", light: "#f3f6d7" }, // Tier 35
-            { dark: "#40324a", light: "#4e395d" }, // Tier 36
-            { dark: "#caddfd", light: "#ddeaff" }, // Tier 37
-            { dark: "#686897", light: "#9393be" }, // Tier 38
-            { dark: "#563242", light: "#8d556e" }, // Tier 39
-            { dark: "#530000", light: "#883535" }, // Tier 40
-            { dark: "#431f45", light: "#674069" }, // Tier 41
-            { dark: "#faf0ac", light: "#fffbde" }, // Tier 42
-            { dark: "#0d0d60", light: "#282891" }, // Tier 43
-            { dark: "#2e2b51", light: "#4b4583" }, // Tier 44
-            { dark: "#322334", light: "#4a2b50" }, // Tier 45
-            { dark: "#707260", light: "#9c9e89" }, // Tier 46
-            { dark: "#40472c", light: "#57613d" }, // Tier 47
-            { dark: "#641d00", light: "#833211" }, // Tier 48
-            { dark: "#470d36", light: "#6e315c" }, // Tier 49
-            { dark: "#000000", light: "#303030" }  // Tier 50
-        ];
-
-        // Helper function to calculate luminance to determine if text should be white or dark
-        function getTextColor(hex) {
-            const r = parseInt(hex.slice(1, 3), 16);
-            const g = parseInt(hex.slice(3, 5), 16);
-            const b = parseInt(hex.slice(5, 7), 16);
-            const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-            return yiq >= 128 ? '#1a1a1a' : '#ffffff';
-        }
-
-        function getExactTierColors(tierNum) {
-            const index = Math.max(0, Math.min(tierNum - 1, customTierColors.length - 1));
-            const pair = customTierColors[index];
-            return {
-                card: pair.light,
-                header: pair.dark,
-                text: getTextColor(pair.dark)
-            };
-        }
-
-        async function fetchSheetData() {
-            const container = document.getElementById('tracker-container');
-            try {
-                const response = await fetch(SHEET_CSV_URL);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                
-                const csvText = await response.text();
-                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim().replace(/^"|"$/g, '')));
-                
-                pucpData = {};
-                currentTierKey = null;
-
-                rows.forEach((row, index) => {
-                    const col0 = row[0] || ""; 
-                    const col1 = row[1] || ""; 
-                    const col2 = row[2] || ""; 
-
-                    if (!col0 && !col1 && !col2) return;
-                    if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
-
-                    const potentialTierNum = parseInt(col2);
-                    if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1.toLowerCase().includes("beat")) {
-                        currentTierKey = `Tier ${potentialTierNum} - ${col0}`;
-                        pucpData[currentTierKey] = {
-                            tierNumber: potentialTierNum,
-                            tierName: col0,
-                            requirement: col1,
-                            challenges: []
-                        };
-                        return;
-                    }
-
-                    if (col0.toLowerCase().startsWith("total")) {
-                        return;
-                    }
-
-                    if (currentTierKey && col0 && col2) {
-                        pucpData[currentTierKey].challenges.push({
-                            id: `ch_${index}`,
-                            name: col0,
-                            mode: col1,
-                            levelId: col2,
-                            completed: false
-                        });
-                    }
-                });
-
-                loadProgress();
-                renderTracker();
-            } catch (error) {
-                console.error('Error fetching sheet:', error);
-                container.innerHTML = `
-                    <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
-                        <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
-                        <p class="text-sm text-red-400">Error: ${error.message}</p>
-                    </div>
-                `;
-            }
-        }
-
-        function loadProgress() {
-            const saved = localStorage.getItem('pucp_progress');
-            if (saved) {
-                const completedIds = JSON.parse(saved);
-                Object.keys(pucpData).forEach(tierKey => {
-                    pucpData[tierKey].challenges.forEach(ch => {
-                        if (completedIds.includes(ch.id)) ch.completed = true;
-                    });
-                });
-            }
-        }
-
-        function saveProgress() {
-            const completedIds = [];
-            Object.keys(pucpData).forEach(tierKey => {
-                pucpData[tierKey].challenges.forEach(ch => {
-                    if (ch.completed) completedIds.push(ch.id);
-                });
-            });
-            localStorage.setItem('pucp_progress', JSON.stringify(completedIds));
-        }
-
-        function renderTracker() {
-            const container = document.getElementById('tracker-container');
-            container.innerHTML = '';
-
-            let totalChallenges = 0;
-            let totalCompleted = 0;
-
-            const tierKeys = Object.keys(pucpData);
-            if (tierKeys.length === 0) {
-                container.innerHTML = `<div class="text-slate-400 text-center col-span-full">No challenges found.</div>`;
-                return;
-            }
-
-            tierKeys.forEach(tierKey => {
-                const tierObj = pucpData[tierKey];
-                const challenges = tierObj.challenges;
-                if (challenges.length === 0) return;
-
-                let tierCompleted = 0;
-                let tierTotal = challenges.length;
-                const colors = getExactTierColors(tierObj.tierNumber);
-
-                let challengesHtml = challenges.map(ch => {
-                    totalChallenges++;
-                    if (ch.completed) {
-                        tierCompleted++;
-                        totalCompleted++;
-                    }
-
-                    return `
-                        <div class="flex items-center justify-between p-3 rounded-md transition border border-black/30" style="background-color: rgba(255, 255, 255, 0.35); color: #1e293b;">
-                            <div>
-                                <h3 class="font-bold text-sm ${ch.completed ? 'line-through opacity-50' : ''}">${ch.name}</h3>
-                                <span class="text-[11px] opacity-75">${ch.mode} • ID: ${ch.levelId}</span>
-                            </div>
-                            <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
-                                onchange="toggleChallenge('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
-                                class="w-5 h-5 accent-slate-900 rounded cursor-pointer ml-3">
-                        </div>
-                    `;
-                }).join('');
-
-                let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
-
-                container.innerHTML += `
-                    <section class="border border-black rounded-md p-5 flex flex-col justify-between shadow-xl" style="background-color: ${colors.card};">
-                        <div>
-                            <div class="rounded-md p-3.5 mb-4 flex justify-between items-start shadow-sm border border-black/40" style="background-color: ${colors.header}; color: ${colors.text};">
-                                <div>
-                                    <span class="text-[10px] font-black uppercase tracking-wider block opacity-90">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
-                                    <h2 class="text-md font-black mt-0.5">${tierObj.tierName}</h2>
-                                </div>
-                                <span class="text-xs font-bold bg-black/10 px-2.5 py-1 rounded-md border border-black/20" style="color: ${colors.text};">${tierCompleted} / ${tierTotal}</span>
-                            </div>
-                            <div class="space-y-2">
-                                ${challengesHtml}
-                            </div>
-                        </div>
-                        <div class="mt-4 pt-3 border-t border-black/20 text-right">
-                            <span class="text-xs font-bold text-slate-900">${tierPercentage}% Completed</span>
-                        </div>
-                    </section>
-                `;
-            });
-
-            let totalPercentage = totalChallenges > 0 ? Math.round((totalCompleted / totalChallenges) * 100) : 0;
-            document.getElementById('total-progress-text').innerText = `${totalCompleted} / ${totalChallenges} (${totalPercentage}%)`;
-        }
-
-        window.toggleChallenge = function(tierKey, chId) {
-            const tierObj = pucpData[tierKey];
-            if (tierObj) {
-                const challenge = tierObj.challenges.find(ch => ch.id === chId);
-                if (challenge) {
-                    challenge.completed = !challenge.completed;
-                    saveProgress();
-                    renderTracker();
-                }
-            }
-        }
-
-        fetchSheetData();
-    </script>
-</body>
-</html>
+            { dark: "#fd8989", light: "#ffb3b3" }, { dark: "#fbf09d", light: "#fff8c2" },
+            { dark: "#b1d3d4", light: "#d0f3f4" }, { dark: "#c17a7a", light: "#efa2a2" },
+            { dark: "#a37dd9", light: "#caa7fb" }, { dark: "#dbb7b7", light: "#efdbdb" },
+            { dark: "#f2b3c1", light: "#f2cad3" }, { dark: "#eccda9", light: "#f1dbc1" },
+            { dark: "#5d4cb0", light: "#897ad2" }, { dark: "#a8c6c8", light: "#c6e8ea" },
+            { dark: "#89b780", light: "#b4deab" }, { dark: "#6d8586", light: "#97b1b2" },
+            { dark: "#c3d19b", light: "#e8f4c8" }, { dark: "#74a89f", light: "#9bcfc6" },
+            { dark: "#9e4d40", light: "#c46f61" }, { dark: "#e3576f", light: "#ef7c90" },
+            { dark: "#caa567", light: "#e5c58f" }, { dark: "#ff76c6", light: "#ffa8db" },
+            { dark: "#4e5058", light: "#808495" }, { dark: "#3b6089", light: "#7194bb" },
+            { dark: "#a9c369", light: "#d1e996" }, { dark: "#9c4b69", light: "#cd7395" },
+            { dark: "#ff9df3", light: "#ffbdf7" }, { dark: "#8
