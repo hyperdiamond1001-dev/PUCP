@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (Custom Tier Colors).</p>
+                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
             </div>
             <div class="mt-4 md:mt-0 bg-slate-900 border border-slate-800 px-4 py-3 rounded-xl text-center">
                 <span class="text-xs text-slate-400 uppercase tracking-wider block">Total Progress</span>
@@ -32,7 +32,7 @@
         let pucpData = {};
         let currentTierKey = null;
 
-        // Custom exact colors provided for Tiers 1–25 (darker first, lighter second)
+        // Custom exact colors for Tiers 1–50 (darker first, lighter second)
         const customTierColors = [
             { dark: "#fd8989", light: "#ffb3b3" }, // Tier 1
             { dark: "#fbf09d", light: "#fff8c2" }, // Tier 2
@@ -58,7 +58,32 @@
             { dark: "#9c4b69", light: "#cd7395" }, // Tier 22
             { dark: "#ff9df3", light: "#ffbdf7" }, // Tier 23
             { dark: "#8b5a70", light: "#c087a1" }, // Tier 24
-            { dark: "#ff7564", light: "#ff9689" }  // Tier 25
+            { dark: "#ff7564", light: "#ff9689" }, // Tier 25
+            { dark: "#b91212", light: "#e03a3a" }, // Tier 26
+            { dark: "#955f8a", light: "#b982ae" }, // Tier 27
+            { dark: "#758f9e", light: "#aec3cf" }, // Tier 28
+            { dark: "#143f3e", light: "#2c6362" }, // Tier 29
+            { dark: "#b1eedc", light: "#e5fff7" }, // Tier 30
+            { dark: "#5f5064", light: "#91799a" }, // Tier 31
+            { dark: "#4b6154", light: "#6e8d7b" }, // Tier 32
+            { dark: "#734949", light: "#ae7777" }, // Tier 33
+            { dark: "#71163f", light: "#8c345c" }, // Tier 34
+            { dark: "#babe90", light: "#f3f6d7" }, // Tier 35
+            { dark: "#40324a", light: "#4e395d" }, // Tier 36
+            { dark: "#caddfd", light: "#ddeaff" }, // Tier 37
+            { dark: "#686897", light: "#9393be" }, // Tier 38
+            { dark: "#563242", light: "#8d556e" }, // Tier 39
+            { dark: "#530000", light: "#883535" }, // Tier 40
+            { dark: "#431f45", light: "#674069" }, // Tier 41
+            { dark: "#faf0ac", light: "#fffbde" }, // Tier 42
+            { dark: "#0d0d60", light: "#282891" }, // Tier 43
+            { dark: "#2e2b51", light: "#4b4583" }, // Tier 44
+            { dark: "#322334", light: "#4a2b50" }, // Tier 45
+            { dark: "#707260", light: "#9c9e89" }, // Tier 46
+            { dark: "#40472c", light: "#57613d" }, // Tier 47
+            { dark: "#641d00", light: "#833211" }, // Tier 48
+            { dark: "#470d36", light: "#6e315c" }, // Tier 49
+            { dark: "#000000", light: "#303030" }  // Tier 50
         ];
 
         // Helper function to calculate luminance to determine if text should be white or dark
@@ -71,7 +96,7 @@
         }
 
         function getExactTierColors(tierNum) {
-            const index = (tierNum - 1) % customTierColors.length;
+            const index = Math.max(0, Math.min(tierNum - 1, customTierColors.length - 1));
             const pair = customTierColors[index];
             return {
                 card: pair.light,
@@ -132,7 +157,7 @@
             } catch (error) {
                 console.error('Error fetching sheet:', error);
                 container.innerHTML = `
-                    <div class="bg-red-950/40 border border-red-800 p-6 rounded-xl text-red-300 col-span-full">
+                    <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
                         <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
                         <p class="text-sm text-red-400">Error: ${error.message}</p>
                     </div>
@@ -192,7 +217,7 @@
                     }
 
                     return `
-                        <div class="flex items-center justify-between p-3 rounded-lg transition" style="background-color: rgba(255, 255, 255, 0.35); color: #1e293b;">
+                        <div class="flex items-center justify-between p-3 rounded-md transition border border-black/30" style="background-color: rgba(255, 255, 255, 0.35); color: #1e293b;">
                             <div>
                                 <h3 class="font-bold text-sm ${ch.completed ? 'line-through opacity-50' : ''}">${ch.name}</h3>
                                 <span class="text-[11px] opacity-75">${ch.mode} • ID: ${ch.levelId}</span>
@@ -207,20 +232,20 @@
                 let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
 
                 container.innerHTML += `
-                    <section class="border border-slate-700/60 rounded-xl p-5 flex flex-col justify-between shadow-xl" style="background-color: ${colors.card};">
+                    <section class="border border-black rounded-md p-5 flex flex-col justify-between shadow-xl" style="background-color: ${colors.card};">
                         <div>
-                            <div class="rounded-lg p-3.5 mb-4 flex justify-between items-start shadow-sm" style="background-color: ${colors.header}; color: ${colors.text};">
+                            <div class="rounded-md p-3.5 mb-4 flex justify-between items-start shadow-sm border border-black/40" style="background-color: ${colors.header}; color: ${colors.text};">
                                 <div>
                                     <span class="text-[10px] font-black uppercase tracking-wider block opacity-90">Tier ${tierObj.tierNumber} • ${tierObj.requirement}</span>
                                     <h2 class="text-md font-black mt-0.5">${tierObj.tierName}</h2>
                                 </div>
-                                <span class="text-xs font-bold bg-black/10 px-2.5 py-1 rounded-md" style="color: ${colors.text};">${tierCompleted} / ${tierTotal}</span>
+                                <span class="text-xs font-bold bg-black/10 px-2.5 py-1 rounded-md border border-black/20" style="color: ${colors.text};">${tierCompleted} / ${tierTotal}</span>
                             </div>
                             <div class="space-y-2">
                                 ${challengesHtml}
                             </div>
                         </div>
-                        <div class="mt-4 pt-3 border-t border-black/10 text-right">
+                        <div class="mt-4 pt-3 border-t border-black/20 text-right">
                             <span class="text-xs font-bold text-slate-900">${tierPercentage}% Completed</span>
                         </div>
                     </section>
