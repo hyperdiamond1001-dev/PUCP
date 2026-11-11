@@ -69,7 +69,6 @@
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
         const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1570158533721460857/-UFXDM4sWtFMTNrnwWbq0UaW84Cldmvl_THzjNud2pq0zatO5NDshE3O3-8zL0eHsb4O';
         
-        // CHANGE YOUR ADMIN PASSWORD HERE:
         const ADMIN_PASSWORD = "pucp2026";
 
         let pucpData = {};
@@ -172,6 +171,7 @@
 
             updateAdminUI();
 
+            // If cache exists and we aren't forcing a refresh, load instantly
             if (cachedCSV && !forceRefresh) {
                 pucpData = parseCSVToData(cachedCSV);
                 loadProgress();
@@ -481,19 +481,6 @@
             pendingChId = null;
         }
 
-        window.adminAction = function(tierKey, chId, action) {
-            if (!isAdmin) return;
-            const tierObj = pucpData[tierKey];
-            if (!tierObj) return;
-            const challenge = tierObj.challenges.find(ch => ch.id === challengeId = ch.id);
-            if (!challenge) return;
-
-            challenge.status = action;
-            saveProgress();
-            renderTracker();
-        }
-
-        // Fixed helper for admin action lookup
         window.adminAction = function(tierKey, chId, action) {
             if (!isAdmin) return;
             const tierObj = pucpData[tierKey];
