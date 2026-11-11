@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Instant progression tracker with Discord webhook submissions.</p>
+                <p class="text-slate-400 text-sm mt-1">Instant progression tracker with Discord review submissions.</p>
             </div>
             
             <div class="flex items-center gap-3 flex-wrap justify-end">
@@ -50,7 +50,7 @@
             <input type="text" id="proof-input" placeholder="https://youtube.com/... or clip link" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-indigo-500">
             <div class="flex justify-end gap-3">
                 <button onclick="closeProofModal(false)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 font-medium transition">Cancel</button>
-                <button onclick="closeProofModal(true)" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 rounded-md text-white font-medium transition">Submit & Check</button>
+                <button onclick="closeProofModal(true)" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 rounded-md text-white font-medium transition">Submit for Review</button>
             </div>
         </div>
     </div>
@@ -144,7 +144,7 @@
                         name: col0,
                         mode: col1,
                         levelId: col2,
-                        completed: false,
+                        status: 'none', // 'none', 'pending', 'approved', 'rejected'
                         proof: ""
                     });
                 }
@@ -156,16 +156,14 @@
             const container = document.getElementById('tracker-container');
             const cachedCSV = localStorage.getItem('pucp_csv_cache');
 
-            // If we have a cache and aren't forcing a refresh, render instantly right away!
             if (cachedCSV && !forceRefresh) {
                 pucpData = parseCSVToData(cachedCSV);
                 loadProgress();
                 renderTracker();
-                backgroundFetchSheet(); // update cache silently in background
+                backgroundFetchSheet();
                 return;
             }
 
-            // Otherwise fetch with a 4-second timeout protection so it never freezes
             try {
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 4000);
@@ -213,13 +211,13 @@
         }
 
         function loadProgress() {
-            const saved = localStorage.getItem('pucp_progress_v2');
+            const saved = localStorage.getItem('pucp_progress_v3');
             if (saved) {
                 const savedData = JSON.parse(saved);
                 Object.keys(pucpData).forEach(tierKey => {
                     pucpData[tierKey].challenges.forEach(ch => {
                         if (savedData[ch.id]) {
-                            ch.completed = savedData[ch.id].completed;
+                            ch.status = savedData[ch.id].status || 'none';
                             ch.proof = savedData[ch.id].proof || "";
                         }
                     });
@@ -231,12 +229,12 @@
             const savedData = {};
             Object.keys(pucpData).forEach(tierKey => {
                 pucpData[tierKey].challenges.forEach(ch => {
-                    if (ch.completed) {
-                        savedData[ch.id] = { completed: true, proof: ch.proof };
+                    if (ch.status !== 'none') {
+                        savedData[ch.id] = { status: ch.status, proof: ch.proof };
                     }
                 });
             });
-            localStorage.setItem('pucp_progress_v2', JSON.stringify(savedData));
+            localStorage.setItem('pucp_progress_v3', JSON.stringify(savedData));
         }
 
         function handleSearch() {
@@ -247,8 +245,9 @@
         async function sendDiscordWebhook(tierObj, challenge, proofLink) {
             if (!DISCORD_WEBHOOK_URL) return;
             
+            // Discord Webhook payload formatted with action links/notes since standard interactive buttons require a backend bot server.
             const payload = {
-                content: `🎯 **New PUCP Submission!**\n> **Tier ${tierObj.tierNumber}:** ${tierObj.tierName}\n> **Level:** ${challenge.name} (${challenge.mode} - ID: ${challenge.levelId})\n> **Proof:** ${proofLink}`
+                content: `🔔 **PUCP Submission Pending Review!**\n> **Tier ${tierObj.tierNumber}:** ${tierObj.tierName}\n> **Level:** ${challenge.name} (${challenge.mode} - ID: ${challenge.levelId})\n> **Proof Link:** ${proofLink}\n\n*To approve/deny, use your local tracker review manager or reply accordingly.*`
             };
 
             try {
@@ -303,22 +302,42 @@
 
                 let challengesHtml = (searchQuery && filteredChallenges.length === 0 ? challenges : filteredChallenges).map(ch => {
                     totalChallenges++;
-                    if (ch.completed) {
+                    
+                    let statusIcon = '';
+                    let isChecked = false;
+                    let textStyle = '';
+                    let statusBadge = '';
+
+                    if (ch.status === 'approved') {
                         tierCompleted++;
                         totalCompleted++;
+                        isChecked = true;
+                        textStyle = 'line-through opacity-50';
+                        statusBadge = `<span class="text-[10px] text-emerald-700 font-bold ml-2">[Approved]</span>`;
+                    } else if (ch.status === 'pending') {
+                        textStyle = 'italic font-medium';
+                        statusBadge = `<span class="text-[10px] text-amber-700 font-bold ml-2">[Pending Review ❓]</span>`;
+                    } else if (ch.status === 'rejected') {
+                        statusBadge = `<span class="text-[10px] text-red-700 font-bold ml-2">[Rejected ❌]</span>`;
                     }
 
-                    let proofBadge = ch.proof ? `<a href="${ch.proof}" target="_blank" class="text-[10px] text-indigo-700 underline font-bold ml-2 hover:text-indigo-900">[View Proof]</a>` : '';
+                    let proofLinkHtml = ch.proof ? `<a href="${ch.proof}" target="_blank" class="text-[10px] text-indigo-700 underline font-bold ml-2 hover:text-indigo-900">[View Proof]</a>` : '';
 
                     return `
                         <div class="flex items-center justify-between p-3 rounded-md transition border border-black/30" style="background-color: rgba(255, 255, 255, 0.35); color: #1e293b;">
                             <div>
-                                <h3 class="font-bold text-sm ${ch.completed ? 'line-through opacity-50' : ''}">${ch.name} ${proofBadge}</h3>
+                                <h3 class="font-bold text-sm ${textStyle}">${ch.name} ${statusBadge} ${proofLinkHtml}</h3>
                                 <span class="text-[11px] opacity-75">${ch.mode} • ID: ${ch.levelId}</span>
                             </div>
-                            <input type="checkbox" id="${ch.id}" ${ch.completed ? 'checked' : ''} 
-                                onclick="event.preventDefault(); triggerCheckbox('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
-                                class="w-5 h-5 accent-slate-900 rounded cursor-pointer ml-3">
+                            <div class="flex items-center gap-2">
+                                ${ch.status === 'pending' ? `
+                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'approved')" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded font-bold" title="Accept">✔</button>
+                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'rejected')" class="text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded font-bold" title="Deny">✖</button>
+                                ` : ''}
+                                <input type="checkbox" id="${ch.id}" ${isChecked ? 'checked' : ''} ${ch.status === 'pending' ? 'disabled' : ''}
+                                    onclick="event.preventDefault(); triggerCheckbox('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
+                                    class="w-5 h-5 accent-slate-900 rounded cursor-pointer ml-1">
+                            </div>
                         </div>
                     `;
                 }).join('');
@@ -368,8 +387,8 @@
             const challenge = tierObj.challenges.find(ch => ch.id === chId);
             if (!challenge) return;
 
-            if (challenge.completed) {
-                challenge.completed = false;
+            if (challenge.status === 'approved' || challenge.status === 'rejected') {
+                challenge.status = 'none';
                 challenge.proof = "";
                 saveProgress();
                 renderTracker();
@@ -382,10 +401,21 @@
                 document.getElementById('proof-input').value = "";
                 document.getElementById('proof-modal').style.display = 'flex';
             } else {
-                challenge.completed = true;
+                challenge.status = 'approved';
                 saveProgress();
                 renderTracker();
             }
+        }
+
+        window.adminAction = function(tierKey, chId, action) {
+            const tierObj = pucpData[tierKey];
+            if (!tierObj) return;
+            const challenge = tierObj.challenges.find(ch => ch.id === chId);
+            if (!challenge) return;
+
+            challenge.status = action; // 'approved' or 'rejected'
+            saveProgress();
+            renderTracker();
         }
 
         window.closeProofModal = function(confirmed) {
@@ -398,7 +428,7 @@
                 if (tierObj) {
                     const challenge = tierObj.challenges.find(ch => ch.id === pendingChId);
                     if (challenge) {
-                        challenge.completed = true;
+                        challenge.status = 'pending'; // Sets checkmark to pending question mark state
                         challenge.proof = proofVal;
                         saveProgress();
                         renderTracker();
