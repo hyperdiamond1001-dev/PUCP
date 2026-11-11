@@ -12,7 +12,7 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Instant progression tracker with Discord review submissions.</p>
+                <p class="text-slate-400 text-sm mt-1">Secure progression tracker with verified submissions & admin mode.</p>
             </div>
             
             <div class="flex items-center gap-3 flex-wrap justify-end">
@@ -23,10 +23,16 @@
                         class="bg-slate-900 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-56 shadow-inner">
                 </div>
 
+                <!-- Admin Toggle Button -->
+                <button onclick="toggleAdminMode()" id="admin-toggle-btn" title="Toggle Admin Controls" 
+                    class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 px-3 py-2 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
+                    🔒 Admin Locked
+                </button>
+
                 <!-- Refresh Sheet Button -->
                 <button onclick="refreshSheetCache()" title="Force fetch latest data from Google Sheets" 
                     class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
-                    🔄 Refresh Sheet
+                    🔄 Refresh
                 </button>
 
                 <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-md text-center">
@@ -42,25 +48,33 @@
         </main>
     </div>
 
-    <!-- Proof Modal / Prompt Handler -->
+    <!-- Proof Modal / Prompt Handler with URL Validation -->
     <div id="proof-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-slate-900 border border-slate-700 rounded-md p-6 max-w-md w-full shadow-2xl">
             <h3 class="text-lg font-bold text-indigo-300 mb-2">Proof Required</h3>
-            <p id="proof-modal-text" class="text-sm text-slate-300 mb-4">Tier 21 and above require submission proof (video link, clip, etc.). Please enter your proof link below:</p>
-            <input type="text" id="proof-input" placeholder="https://youtube.com/... or clip link" class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-white mb-4 focus:outline-none focus:border-indigo-500">
-            <div class="flex justify-end gap-3">
-                <button onclick="closeProofModal(false)" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 font-medium transition">Cancel</button>
-                <button onclick="closeProofModal(true)" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 rounded-md text-white font-medium transition">Submit for Review</button>
-            </div>
+            <p id="proof-modal-text" class="text-sm text-slate-300 mb-4">Tier 21 and above require a valid submission link (YouTube, Google Drive, clip link, etc.):</p>
+            <form id="proof-form" onsubmit="submitProofForm(event)">
+                <input type="url" id="proof-input" placeholder="https://youtube.com/watch?v=..." required 
+                    class="w-full bg-slate-950 border border-slate-700 rounded-md px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-indigo-500">
+                <p class="text-[11px] text-slate-400 mb-4">Must be a valid URL starting with http:// or https://</p>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeProofModal()" class="px-4 py-2 text-sm bg-slate-800 hover:bg-slate-700 rounded-md text-slate-300 font-medium transition">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-500 rounded-md text-white font-medium transition">Submit for Review</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <script>
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
         const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1570158533721460857/-UFXDM4sWtFMTNrnwWbq0UaW84Cldmvl_THzjNud2pq0zatO5NDshE3O3-8zL0eHsb4O';
+        
+        // CHANGE YOUR ADMIN PASSWORD HERE:
+        const ADMIN_PASSWORD = "pucp2026";
 
         let pucpData = {};
         let searchQuery = "";
+        let isAdmin = localStorage.getItem('pucp_is_admin') === 'true';
         
         let pendingTierKey = null;
         let pendingChId = null;
@@ -144,7 +158,7 @@
                         name: col0,
                         mode: col1,
                         levelId: col2,
-                        status: 'none', // 'none', 'pending', 'approved', 'rejected'
+                        status: 'none', 
                         proof: ""
                     });
                 }
@@ -155,6 +169,8 @@
         async function initTracker(forceRefresh = false) {
             const container = document.getElementById('tracker-container');
             const cachedCSV = localStorage.getItem('pucp_csv_cache');
+
+            updateAdminUI();
 
             if (cachedCSV && !forceRefresh) {
                 pucpData = parseCSVToData(cachedCSV);
@@ -188,7 +204,7 @@
                     container.innerHTML = `
                         <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
                             <h3 class="font-bold text-lg mb-2">Could Not Load Sheet Data</h3>
-                            <p class="text-sm text-red-400">Please check your internet connection or try clicking 'Refresh Sheet'.</p>
+                            <p class="text-sm text-red-400">Please check your internet connection or try clicking 'Refresh'.</p>
                         </div>
                     `;
                 }
@@ -242,12 +258,41 @@
             renderTracker();
         }
 
+        function toggleAdminMode() {
+            if (isAdmin) {
+                isAdmin = false;
+                localStorage.setItem('pucp_is_admin', 'false');
+                alert("Admin mode locked.");
+            } else {
+                const pwd = prompt("Enter Admin Password:");
+                if (pwd === ADMIN_PASSWORD) {
+                    isAdmin = true;
+                    localStorage.setItem('pucp_is_admin', 'true');
+                    alert("Admin mode unlocked successfully!");
+                } else if (pwd !== null) {
+                    alert("Incorrect password!");
+                }
+            }
+            updateAdminUI();
+            renderTracker();
+        }
+
+        function updateAdminUI() {
+            const btn = document.getElementById('admin-toggle-btn');
+            if (isAdmin) {
+                btn.innerHTML = "🔓 Admin Unlocked";
+                btn.className = "bg-emerald-950 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 px-3 py-2 rounded-md text-xs font-semibold transition flex items-center gap-1.5";
+            } else {
+                btn.innerHTML = "🔒 Admin Locked";
+                btn.className = "bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-400 px-3 py-2 rounded-md text-xs font-semibold transition flex items-center gap-1.5";
+            }
+        }
+
         async function sendDiscordWebhook(tierObj, challenge, proofLink) {
             if (!DISCORD_WEBHOOK_URL) return;
             
-            // Discord Webhook payload formatted with action links/notes since standard interactive buttons require a backend bot server.
             const payload = {
-                content: `🔔 **PUCP Submission Pending Review!**\n> **Tier ${tierObj.tierNumber}:** ${tierObj.tierName}\n> **Level:** ${challenge.name} (${challenge.mode} - ID: ${challenge.levelId})\n> **Proof Link:** ${proofLink}\n\n*To approve/deny, use your local tracker review manager or reply accordingly.*`
+                content: `🔔 **New PUCP Submission for Review!**\n> **Tier ${tierObj.tierNumber}:** ${tierObj.tierName}\n> **Level:** ${challenge.name} (${challenge.mode} - ID: ${challenge.levelId})\n> **Proof Link:** ${proofLink}`
             };
 
             try {
@@ -303,7 +348,6 @@
                 let challengesHtml = (searchQuery && filteredChallenges.length === 0 ? challenges : filteredChallenges).map(ch => {
                     totalChallenges++;
                     
-                    let statusIcon = '';
                     let isChecked = false;
                     let textStyle = '';
                     let statusBadge = '';
@@ -313,26 +357,30 @@
                         totalCompleted++;
                         isChecked = true;
                         textStyle = 'line-through opacity-50';
-                        statusBadge = `<span class="text-[10px] text-emerald-700 font-bold ml-2">[Approved]</span>`;
+                        statusBadge = `<span class="text-[10px] font-bold bg-emerald-500/20 text-emerald-900 border border-emerald-500/30 px-2 py-0.5 rounded-full ml-2">✔ Approved</span>`;
                     } else if (ch.status === 'pending') {
-                        textStyle = 'italic font-medium';
-                        statusBadge = `<span class="text-[10px] text-amber-700 font-bold ml-2">[Pending Review ❓]</span>`;
+                        textStyle = 'font-medium';
+                        statusBadge = `<span class="text-[10px] font-bold bg-amber-500/20 text-amber-900 border border-amber-500/30 px-2 py-0.5 rounded-full ml-2">❓ Pending Review</span>`;
                     } else if (ch.status === 'rejected') {
-                        statusBadge = `<span class="text-[10px] text-red-700 font-bold ml-2">[Rejected ❌]</span>`;
+                        statusBadge = `<span class="text-[10px] font-bold bg-red-500/20 text-red-900 border border-red-500/30 px-2 py-0.5 rounded-full ml-2">✖ Rejected</span>`;
                     }
 
                     let proofLinkHtml = ch.proof ? `<a href="${ch.proof}" target="_blank" class="text-[10px] text-indigo-700 underline font-bold ml-2 hover:text-indigo-900">[View Proof]</a>` : '';
 
                     return `
-                        <div class="flex items-center justify-between p-3 rounded-md transition border border-black/30" style="background-color: rgba(255, 255, 255, 0.35); color: #1e293b;">
-                            <div>
-                                <h3 class="font-bold text-sm ${textStyle}">${ch.name} ${statusBadge} ${proofLinkHtml}</h3>
-                                <span class="text-[11px] opacity-75">${ch.mode} • ID: ${ch.levelId}</span>
+                        <div class="flex items-center justify-between p-3 rounded-md transition border border-black/30 bg-white/40 text-slate-900">
+                            <div class="overflow-hidden pr-2">
+                                <h3 class="font-bold text-sm flex items-center flex-wrap gap-1 ${textStyle}">
+                                    <span>${ch.name}</span>
+                                    ${statusBadge}
+                                    ${proofLinkHtml}
+                                </h3>
+                                <span class="text-[11px] text-slate-700">${ch.mode} • ID: ${ch.levelId}</span>
                             </div>
-                            <div class="flex items-center gap-2">
-                                ${ch.status === 'pending' ? `
-                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'approved')" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded font-bold" title="Accept">✔</button>
-                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'rejected')" class="text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded font-bold" title="Deny">✖</button>
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                ${isAdmin && ch.status === 'pending' ? `
+                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'approved')" class="text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-2 py-1 rounded font-bold shadow" title="Accept">✔ Accept</button>
+                                    <button onclick="adminAction('${tierKey.replace(/'/g, "\\'")}', '${ch.id}', 'rejected')" class="text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded font-bold shadow" title="Deny">✖ Deny</button>
                                 ` : ''}
                                 <input type="checkbox" id="${ch.id}" ${isChecked ? 'checked' : ''} ${ch.status === 'pending' ? 'disabled' : ''}
                                     onclick="event.preventDefault(); triggerCheckbox('${tierKey.replace(/'/g, "\\'")}', '${ch.id}')"
@@ -346,9 +394,9 @@
 
                 let disclaimerHtml = '';
                 if (tierObj.tierNumber === 21) {
-                    disclaimerHtml = `<div class="text-[11px] font-semibold text-red-900 bg-red-500/20 px-2 py-1 rounded mb-3 border border-red-500/30">⚠️ From here on out you need video proof for submissions.</div>`;
+                    disclaimerHtml = `<div class="text-[11px] font-semibold text-red-900 bg-red-500/20 px-2.5 py-1.5 rounded-md mb-3 border border-red-500/30">⚠️ From Tier 21 onwards, submissions require video proof.</div>`;
                 } else if (tierObj.tierNumber === 30) {
-                    disclaimerHtml = `<div class="text-[11px] font-semibold text-red-900 bg-red-500/20 px-2 py-1 rounded mb-3 border border-red-500/30">⚠️ From here on out you need video proof & clicks.</div>`;
+                    disclaimerHtml = `<div class="text-[11px] font-semibold text-red-900 bg-red-500/20 px-2.5 py-1.5 rounded-md mb-3 border border-red-500/30">⚠️ From Tier 30 onwards, submissions require video proof & clicks.</div>`;
                 }
 
                 container.innerHTML += `
@@ -407,28 +455,16 @@
             }
         }
 
-        window.adminAction = function(tierKey, chId, action) {
-            const tierObj = pucpData[tierKey];
-            if (!tierObj) return;
-            const challenge = tierObj.challenges.find(ch => ch.id === chId);
-            if (!challenge) return;
-
-            challenge.status = action; // 'approved' or 'rejected'
-            saveProgress();
-            renderTracker();
-        }
-
-        window.closeProofModal = function(confirmed) {
-            const modal = document.getElementById('proof-modal');
-            modal.style.display = 'none';
-
-            if (confirmed && pendingTierKey && pendingChId) {
-                const proofVal = document.getElementById('proof-input').value.trim();
+        window.submitProofForm = function(event) {
+            event.preventDefault();
+            const proofVal = document.getElementById('proof-input').value.trim();
+            
+            if (pendingTierKey && pendingChId) {
                 const tierObj = pucpData[pendingTierKey];
                 if (tierObj) {
                     const challenge = tierObj.challenges.find(ch => ch.id === pendingChId);
                     if (challenge) {
-                        challenge.status = 'pending'; // Sets checkmark to pending question mark state
+                        challenge.status = 'pending';
                         challenge.proof = proofVal;
                         saveProgress();
                         renderTracker();
@@ -436,8 +472,38 @@
                     }
                 }
             }
+            closeProofModal();
+        }
+
+        window.closeProofModal = function() {
+            document.getElementById('proof-modal').style.display = 'none';
             pendingTierKey = null;
             pendingChId = null;
+        }
+
+        window.adminAction = function(tierKey, chId, action) {
+            if (!isAdmin) return;
+            const tierObj = pucpData[tierKey];
+            if (!tierObj) return;
+            const challenge = tierObj.challenges.find(ch => ch.id === challengeId = ch.id);
+            if (!challenge) return;
+
+            challenge.status = action;
+            saveProgress();
+            renderTracker();
+        }
+
+        // Fixed helper for admin action lookup
+        window.adminAction = function(tierKey, chId, action) {
+            if (!isAdmin) return;
+            const tierObj = pucpData[tierKey];
+            if (!tierObj) return;
+            const challenge = tierObj.challenges.find(ch => ch.id === chId);
+            if (!challenge) return;
+
+            challenge.status = action;
+            saveProgress();
+            renderTracker();
         }
 
         initTracker();
