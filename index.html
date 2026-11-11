@@ -12,27 +12,33 @@
         <header class="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-slate-800 pb-6 gap-4">
             <div>
                 <h1 class="text-3xl font-black tracking-wider text-indigo-400">PUCP PROGRESSION TRACKER</h1>
-                <p class="text-slate-400 text-sm mt-1">Live progression tracker linked to your Google Sheet (All 50 Tiers).</p>
+                <p class="text-slate-400 text-sm mt-1">Instant progression tracker with Discord webhook submissions.</p>
             </div>
             
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-3 flex-wrap justify-end">
                 <!-- Search Bar -->
                 <div class="relative">
                     <input type="text" id="search-input" placeholder="Search tiers, levels, IDs..." 
                         oninput="handleSearch()"
-                        class="bg-slate-900 border border-slate-700 rounded-md px-4 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-64 shadow-inner">
+                        class="bg-slate-900 border border-slate-700 rounded-md px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-56 shadow-inner">
                 </div>
 
-                <div class="bg-slate-900 border border-slate-800 px-4 py-2.5 rounded-md text-center">
+                <!-- Refresh Sheet Button -->
+                <button onclick="refreshSheetCache()" title="Force fetch latest data from Google Sheets" 
+                    class="bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 px-3 py-2 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
+                    🔄 Refresh Sheet
+                </button>
+
+                <div class="bg-slate-900 border border-slate-800 px-4 py-2 rounded-md text-center">
                     <span class="text-[10px] text-slate-400 uppercase tracking-wider block">Total Progress</span>
-                    <span id="total-progress-text" class="text-xl font-bold text-emerald-400">Loading...</span>
+                    <span id="total-progress-text" class="text-base font-bold text-emerald-400">Loading...</span>
                 </div>
             </div>
         </header>
 
         <!-- Main Grid Container -->
         <main id="tracker-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div class="text-center text-slate-400 py-12 col-span-full">Fetching all tiers from Google Sheets...</div>
+            <div class="text-center text-slate-400 py-12 col-span-full">Loading tracker...</div>
         </main>
     </div>
 
@@ -51,16 +57,14 @@
 
     <script>
         const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTbwvC0rLYgtcy_szi7Wh9xw_fVwJxI-ntdSyb12PNPTdoKJxoHQ-CpbeUAP_z8U_Kut-1A1CQGTOC6/pub?output=csv';
+        const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1570158533721460857/-UFXDM4sWtFMTNrnwWbq0UaW84Cldmvl_THzjNud2pq0zatO5NDshE3O3-8zL0eHsb4O';
 
         let pucpData = {};
-        let currentTierKey = null;
         let searchQuery = "";
         
-        // Temporary state tracking for proof modal callbacks
         let pendingTierKey = null;
         let pendingChId = null;
 
-        // Custom exact colors for Tiers 1–50
         const customTierColors = [
             { dark: "#fd8989", light: "#ffb3b3" }, { dark: "#fbf09d", light: "#fff8c2" },
             { dark: "#b1d3d4", light: "#d0f3f4" }, { dark: "#c17a7a", light: "#efa2a2" },
@@ -107,69 +111,105 @@
             };
         }
 
-        async function fetchSheetData() {
+        function parseCSVToData(csvText) {
+            const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim().replace(/^"|"$/g, '')));
+            let parsedData = {};
+            let currentKey = null;
+
+            rows.forEach((row, index) => {
+                const col0 = row[0] || ""; 
+                const col1 = row[1] || ""; 
+                const col2 = row[2] || ""; 
+
+                if (!col0 && !col1 && !col2) return;
+                if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
+
+                const potentialTierNum = parseInt(col2);
+                if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1.toLowerCase().includes("beat")) {
+                    currentKey = `Tier ${potentialTierNum} - ${col0}`;
+                    parsedData[currentKey] = {
+                        tierNumber: potentialTierNum,
+                        tierName: col0,
+                        requirement: col1,
+                        challenges: []
+                    };
+                    return;
+                }
+
+                if (col0.toLowerCase().startsWith("total")) return;
+
+                if (currentKey && col0 && col2) {
+                    parsedData[currentKey].challenges.push({
+                        id: `ch_${index}`,
+                        name: col0,
+                        mode: col1,
+                        levelId: col2,
+                        completed: false,
+                        proof: ""
+                    });
+                }
+            });
+            return parsedData;
+        }
+
+        async function initTracker(forceRefresh = false) {
             const container = document.getElementById('tracker-container');
+            
             try {
-                const response = await fetch(SHEET_CSV_URL);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const cachedCSV = localStorage.getItem('pucp_csv_cache');
                 
-                const csvText = await response.text();
-                const rows = csvText.split('\n').map(row => row.split(',').map(val => val.trim().replace(/^"|"$/g, '')));
-                
-                pucpData = {};
-                currentTierKey = null;
-
-                rows.forEach((row, index) => {
-                    const col0 = row[0] || ""; 
-                    const col1 = row[1] || ""; 
-                    const col2 = row[2] || ""; 
-
-                    if (!col0 && !col1 && !col2) return;
-                    if (col0.includes("Paradox's Ultimate Challenge") || col0.includes("Total Levels")) return;
-
-                    const potentialTierNum = parseInt(col2);
-                    if (!isNaN(potentialTierNum) && potentialTierNum >= 1 && potentialTierNum <= 50 && col1.toLowerCase().includes("beat")) {
-                        currentTierKey = `Tier ${potentialTierNum} - ${col0}`;
-                        pucpData[currentTierKey] = {
-                            tierNumber: potentialTierNum,
-                            tierName: col0,
-                            requirement: col1,
-                            challenges: []
-                        };
-                        return;
-                    }
-
-                    if (col0.toLowerCase().startsWith("total")) return;
-
-                    if (currentTierKey && col0 && col2) {
-                        pucpData[currentTierKey].challenges.push({
-                            id: `ch_${index}`,
-                            name: col0,
-                            mode: col1,
-                            levelId: col2,
-                            completed: false,
-                            proof: ""
-                        });
-                    }
-                });
-
-                loadProgress();
-                renderTracker();
+                if (cachedCSV && !forceRefresh) {
+                    pucpData = parseCSVToData(cachedCSV);
+                    loadProgress();
+                    renderTracker();
+                    backgroundFetchSheet();
+                } else {
+                    const response = await fetch(SHEET_CSV_URL);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const csvText = await response.text();
+                    
+                    localStorage.setItem('pucp_csv_cache', csvText);
+                    pucpData = parseCSVToData(csvText);
+                    loadProgress();
+                    renderTracker();
+                }
             } catch (error) {
                 console.error('Error fetching sheet:', error);
-                container.innerHTML = `
-                    <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
-                        <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
-                        <p class="text-sm text-red-400">Error: ${error.message}</p>
-                    </div>
-                `;
+                const cachedCSV = localStorage.getItem('pucp_csv_cache');
+                if (cachedCSV) {
+                    pucpData = parseCSVToData(cachedCSV);
+                    loadProgress();
+                    renderTracker();
+                } else {
+                    container.innerHTML = `
+                        <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
+                            <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
+                            <p class="text-sm text-red-400">Error: ${error.message}</p>
+                        </div>
+                    `;
+                }
             }
+        }
+
+        async function backgroundFetchSheet() {
+            try {
+                const response = await fetch(SHEET_CSV_URL);
+                if (response.ok) {
+                    const csvText = await response.text();
+                    localStorage.setItem('pucp_csv_cache', csvText);
+                }
+            } catch (e) {}
+        }
+
+        function refreshSheetCache() {
+            document.getElementById('tracker-container').innerHTML = `<div class="text-center text-slate-400 py-12 col-span-full">Refreshing from Google Sheets...</div>`;
+            initTracker(true);
         }
 
         function loadProgress() {
             const saved = localStorage.getItem('pucp_progress_v2');
             if (saved) {
-                const savedData = JSON.parse(saved); // mapping of ch.id -> { completed: true, proof: "..." }
+                const savedData = JSON.parse(saved);
                 Object.keys(pucpData).forEach(tierKey => {
                     pucpData[tierKey].challenges.forEach(ch => {
                         if (savedData[ch.id]) {
@@ -198,6 +238,24 @@
             renderTracker();
         }
 
+        async function sendDiscordWebhook(tierObj, challenge, proofLink) {
+            if (!DISCORD_WEBHOOK_URL) return;
+            
+            const payload = {
+                content: `🎯 **New PUCP Submission!**\n> **Tier ${tierObj.tierNumber}:** ${tierObj.tierName}\n> **Level:** ${challenge.name} (${challenge.mode} - ID: ${challenge.levelId})\n> **Proof:** ${proofLink}`
+            };
+
+            try {
+                await fetch(DISCORD_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (err) {
+                console.error("Failed to send webhook to Discord:", err);
+            }
+        }
+
         function renderTracker() {
             const container = document.getElementById('tracker-container');
             container.innerHTML = '';
@@ -222,7 +280,6 @@
                 let tierTotal = challenges.length;
                 const colors = getExactTierColors(tierObj.tierNumber);
 
-                // Filter challenges based on search query
                 const filteredChallenges = challenges.filter(ch => {
                     if (!searchQuery) return true;
                     const matchTier = tierKey.toLowerCase().includes(searchQuery) || String(tierObj.tierNumber).includes(searchQuery);
@@ -233,7 +290,7 @@
                 });
 
                 if (searchQuery && filteredChallenges.length === 0 && !tierKey.toLowerCase().includes(searchQuery) && !String(tierObj.tierNumber).includes(searchQuery)) {
-                    return; // Skip rendering tier if search doesn't match anything inside it
+                    return;
                 }
 
                 visibleTiersCount++;
@@ -262,7 +319,6 @@
 
                 let tierPercentage = tierTotal > 0 ? Math.round((tierCompleted / tierTotal) * 100) : 0;
 
-                // Disclaimer text logic
                 let disclaimerHtml = '';
                 if (tierObj.tierNumber === 21) {
                     disclaimerHtml = `<div class="text-[11px] font-semibold text-red-900 bg-red-500/20 px-2 py-1 rounded mb-3 border border-red-500/30">⚠️ From here on out you need video proof for submissions.</div>`;
@@ -306,7 +362,6 @@
             const challenge = tierObj.challenges.find(ch => ch.id === chId);
             if (!challenge) return;
 
-            // If it's already checked, allow unchecked instantly without modal
             if (challenge.completed) {
                 challenge.completed = false;
                 challenge.proof = "";
@@ -315,7 +370,6 @@
                 return;
             }
 
-            // If tier >= 21 and checking it for the first time, require proof prompt
             if (tierObj.tierNumber >= 21) {
                 pendingTierKey = tierKey;
                 pendingChId = chId;
@@ -325,31 +379,3 @@
                 challenge.completed = true;
                 saveProgress();
                 renderTracker();
-            }
-        }
-
-        window.closeProofModal = function(confirmed) {
-            const modal = document.getElementById('proof-modal');
-            modal.style.display = 'none';
-
-            if (confirmed && pendingTierKey && pendingChId) {
-                const proofVal = document.getElementById('proof-input').value.trim();
-                const tierObj = pucpData[pendingTierKey];
-                if (tierObj) {
-                    const challenge = tierObj.challenges.find(ch => ch.id === pendingChId);
-                    if (challenge) {
-                        challenge.completed = true;
-                        challenge.proof = proofVal;
-                        saveProgress();
-                        renderTracker();
-                    }
-                }
-            }
-            pendingTierKey = null;
-            pendingChId = null;
-        }
-
-        fetchSheetData();
-    </script>
-</body>
-</html>
