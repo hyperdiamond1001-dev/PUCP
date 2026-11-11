@@ -154,28 +154,34 @@
 
         async function initTracker(forceRefresh = false) {
             const container = document.getElementById('tracker-container');
-            
+            const cachedCSV = localStorage.getItem('pucp_csv_cache');
+
+            // If we have a cache and aren't forcing a refresh, render instantly right away!
+            if (cachedCSV && !forceRefresh) {
+                pucpData = parseCSVToData(cachedCSV);
+                loadProgress();
+                renderTracker();
+                backgroundFetchSheet(); // update cache silently in background
+                return;
+            }
+
+            // Otherwise fetch with a 4-second timeout protection so it never freezes
             try {
-                const cachedCSV = localStorage.getItem('pucp_csv_cache');
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+                const response = await fetch(SHEET_CSV_URL, { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                const csvText = await response.text();
                 
-                if (cachedCSV && !forceRefresh) {
-                    pucpData = parseCSVToData(cachedCSV);
-                    loadProgress();
-                    renderTracker();
-                    backgroundFetchSheet();
-                } else {
-                    const response = await fetch(SHEET_CSV_URL);
-                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                    const csvText = await response.text();
-                    
-                    localStorage.setItem('pucp_csv_cache', csvText);
-                    pucpData = parseCSVToData(csvText);
-                    loadProgress();
-                    renderTracker();
-                }
+                localStorage.setItem('pucp_csv_cache', csvText);
+                pucpData = parseCSVToData(csvText);
+                loadProgress();
+                renderTracker();
             } catch (error) {
-                console.error('Error fetching sheet:', error);
-                const cachedCSV = localStorage.getItem('pucp_csv_cache');
+                console.warn('Network fetch timed out or failed, falling back to cache:', error);
                 if (cachedCSV) {
                     pucpData = parseCSVToData(cachedCSV);
                     loadProgress();
@@ -183,8 +189,8 @@
                 } else {
                     container.innerHTML = `
                         <div class="bg-red-950/40 border border-red-800 p-6 rounded-md text-red-300 col-span-full">
-                            <h3 class="font-bold text-lg mb-2">Could Not Read Google Sheet Data</h3>
-                            <p class="text-sm text-red-400">Error: ${error.message}</p>
+                            <h3 class="font-bold text-lg mb-2">Could Not Load Sheet Data</h3>
+                            <p class="text-sm text-red-400">Please check your internet connection or try clicking 'Refresh Sheet'.</p>
                         </div>
                     `;
                 }
@@ -379,3 +385,32 @@
                 challenge.completed = true;
                 saveProgress();
                 renderTracker();
+            }
+        }
+
+        window.closeProofModal = function(confirmed) {
+            const modal = document.getElementById('proof-modal');
+            modal.style.display = 'none';
+
+            if (confirmed && pendingTierKey && pendingChId) {
+                const proofVal = document.getElementById('proof-input').value.trim();
+                const tierObj = pucpData[pendingTierKey];
+                if (tierObj) {
+                    const challenge = tierObj.challenges.find(ch => ch.id === pendingChId);
+                    if (challenge) {
+                        challenge.completed = true;
+                        challenge.proof = proofVal;
+                        saveProgress();
+                        renderTracker();
+                        sendDiscordWebhook(tierObj, challenge, proofVal);
+                    }
+                }
+            }
+            pendingTierKey = null;
+            pendingChId = null;
+        }
+
+        initTracker();
+    </script>
+</body>
+</html>
